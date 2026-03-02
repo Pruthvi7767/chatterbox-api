@@ -1,7 +1,0 @@
-torch
-torchaudio
-fastapi
-uvicorn
-chatterbox-tts
-huggingface_hub
-numpy
