@@ -1,33 +1,19 @@
 import io
 import torch
-import torchaudio
-from fastapi import FastAPI, HTTPException
+import soundfile as sf
+from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from pathlib import Path
-from huggingface_hub import snapshot_download
-from chatterbox.tts import ChatterboxTTS
+from transformers import VitsModel, AutoTokenizer
 
 app = FastAPI()
 
-print("Starting app...")
+device = "cpu"
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-print("Using device:", device)
-
-print("Downloading model...")
-local_dir = snapshot_download(
-    repo_id="ResembleAI/chatterbox-turbo"
-)
-
-print("Loading model...")
-model = ChatterboxTTS.from_local(
-    Path(local_dir),
-    device
-)
-
-model.eval()
-print("Model loaded successfully!")
+print("Loading VITS model...")
+model = VitsModel.from_pretrained("espnet/kan-bayashi_ljspeech_vits").to(device)
+tokenizer = AutoTokenizer.from_pretrained("espnet/kan-bayashi_ljspeech_vits")
+print("Model loaded.")
 
 class TTSRequest(BaseModel):
     text: str
@@ -37,15 +23,14 @@ def root():
     return {"status": "running"}
 
 @app.post("/tts")
-async def generate_tts(request: TTSRequest):
-    try:
-        wav = model.generate(request.text)
+def generate_tts(request: TTSRequest):
+    inputs = tokenizer(request.text, return_tensors="pt").to(device)
 
-        buffer = io.BytesIO()
-        torchaudio.save(buffer, wav.cpu(), 24000, format="wav")
-        buffer.seek(0)
+    with torch.no_grad():
+        output = model(**inputs).waveform
 
-        return StreamingResponse(buffer, media_type="audio/wav")
+    buffer = io.BytesIO()
+    sf.write(buffer, output.squeeze().cpu().numpy(), 22050, format="WAV")
+    buffer.seek(0)
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return StreamingResponse(buffer, media_type="audio/wav")

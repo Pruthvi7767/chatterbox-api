@@ -1,7 +1,7 @@
-torch
-torchaudio
+torch==2.1.2
+torchaudio==2.1.2
 fastapi
 uvicorn
-chatterbox-tts
-huggingface_hub
-numpy
+transformers
+scipy
+soundfile
